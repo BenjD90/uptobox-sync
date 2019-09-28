@@ -10,6 +10,7 @@ import { join } from 'path';
 // tslint:disable:no-import-side-effect
 import 'source-map-support/register';
 import { Conf } from './conf/index.models';
+import _ = require('lodash');
 
 // Handle Unhandled promise rejections
 process.on('unhandledRejection', /* istanbul ignore next */ (err) => {
@@ -47,13 +48,19 @@ async function start(): Promise<{ server: Server, db: Db, conf: Conf }> {
 		path: join(__dirname, 'modules'),
 		http: conf.http,
 		shutdown: {
-			waitDurationBeforeStop: 0,
+			waitDurationBeforeStop: 5000,
 			callbacksBeforeShutdown,
 		}
 	});
 
 	// Log the startup time
 	log.profile('startup');
+
+	log.info(`Folders to sync : `, _.map(conf.files.directories, 'path').join(' | '));
+	log.info(`Upload method : ${ conf.uptobox.uploadType}`);
+	log.info(`Upload concurrency limit : ${ conf.uptobox.concurrencyLimit}`);
+	log.info(`Upload poolSize : ${ conf.uptobox.poolSize}`);
+
 	// Return server and more for testing
 	return { server, db, conf };
 }

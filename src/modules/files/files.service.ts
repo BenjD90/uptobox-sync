@@ -42,15 +42,17 @@ export class FilesService {
 				const size = (await FsExtra.stat(file)).size;
 				const name = path.basename(file);
 				const directoryFullPath = path.dirname(file);
-				await this.mongoClient.findOneAndUpsert({ name }, {
-					$set: {
-						fullPath: file,
-						name,
-						fileSizeByte: size,
-						directoryFullPath,
-						directoryBasePath: directory.path,
-					} as FileEntity,
-				}, 'app', undefined, false);
+				if (size > this.conf.files.minSizeMegaBytes * 1_024 * 1_024) { // 2 Mo
+					await this.mongoClient.findOneAndUpsert({ name }, {
+						$set: {
+							fullPath: file,
+							name,
+							fileSizeByte: size,
+							directoryFullPath,
+							directoryBasePath: directory.path,
+						} as FileEntity,
+					}, 'app', undefined, false);
+				}
 			}
 		}
 	}
@@ -70,17 +72,11 @@ export class FilesService {
 	}
 
 	public async findAllFilesToSyncAsStream(): Promise<MongoReadStream<Partial<FileEntity>, Partial<FileEntity>>> {
-		return this.mongoClient.streamWithType({
-			syncDate: {
-				$exists: false,
-			},
-			error: {
-				$exists: false,
-			},
-			fileSizeByte: {
-				$gte: 2 * 1_024 * 1_024, // 2 Mo
-			},
-		}, FileEntity, 1);
+		return this.mongoClient.streamWithType(this.getQueryForAllFilesToSync(), FileEntity, 1);
+	}
+
+	public async countAllFilesToSync(): Promise<number> {
+		return this.mongoClient.count(this.getQueryForAllFilesToSync());
 	}
 
 	public async saveErrorToFile(id: string, error: N9Error): Promise<void> {
@@ -89,5 +85,24 @@ export class FilesService {
 				error,
 			},
 		}, 'app');
+	}
+
+	public async setSynced(id: string) {
+		await this.mongoClient.findOneAndUpdateById(id, {
+			$set: {
+				syncDate: new Date(),
+			},
+		}, 'app');
+	}
+
+	private getQueryForAllFilesToSync(): object {
+		return {
+			syncDate: {
+				$exists: false,
+			},
+			error: {
+				$exists: false,
+			},
+		};
 	}
 }

@@ -1455,6 +1455,14 @@ cli-cursor@^2.1.0:
   dependencies:
     restore-cursor "^2.0.0"
 
+cli-progress@^3.2.0:
+  version "3.2.0"
+  resolved "https://registry.yarnpkg.com/cli-progress/-/cli-progress-3.2.0.tgz#e3cd651a1317d775805a84fbfe3df7172bb281b1"
+  integrity sha512-Py2uQf4b4IcOILOym/Jhpeny+5cz/WYPOhSTkAoAIGPfQEHDBz3k7Ph46vBGX4lRG7Oby2G0D7jnPEQ2LCU8rQ==
+  dependencies:
+    colors "^1.1.2"
+    string-width "^2.1.1"
+
 cli-spinners@^1.1.0:
   version "1.3.1"
   resolved "https://registry.npmjs.org/cli-spinners/-/cli-spinners-1.3.1.tgz#002c1990912d0d59580c93bd36c056de99e4259a"
@@ -1553,7 +1561,7 @@ colors@1.0.x:
   resolved "https://registry.yarnpkg.com/colors/-/colors-1.0.3.tgz#0433f44d809680fdeb60ed260f1b0c262e82a40b"
   integrity sha1-BDP0TYCWgP3rYO0mDxsMJi6CpAs=
 
-colors@^1.2.1:
+colors@^1.1.2, colors@^1.2.1:
   version "1.4.0"
   resolved "https://registry.yarnpkg.com/colors/-/colors-1.4.0.tgz#c50491479d4c1bdaed2c9ced32cf7c7dc2360f78"
   integrity sha512-a+UqTh4kgZg/SlGvfbzDHpgRu7AAQOmmqRHJnxhRZICKFUT91brVhNNt58CMWU9PsBbv3PDCZUHbVxuDiH2mtA==
@@ -4386,6 +4394,11 @@ nested-error-stacks@^2.0.0:
   resolved "https://registry.npmjs.org/nested-error-stacks/-/nested-error-stacks-2.1.0.tgz#0fbdcf3e13fe4994781280524f8b96b0cdff9c61"
   integrity sha512-AO81vsIO1k1sM4Zrd6Hu7regmJN1NSiAja10gc4bX3F0wd+9rQmcuHQaHVQCYIEC8iFXnE+mavh23GOt7wBgug==
 
+next-tick@^1.0.0:
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/next-tick/-/next-tick-1.0.0.tgz#ca86d1fe8828169b0120208e3dc8424b9db8342c"
+  integrity sha1-yobR/ogoFpsBICCOPchCS524NCw=
+
 nice-try@^1.0.4:
   version "1.0.5"
   resolved "https://registry.npmjs.org/nice-try/-/nice-try-1.0.5.tgz#a3378a7696ce7d223e88fc9b764bd7ef1089e366"
@@ -4890,6 +4903,24 @@ process-nextick-args@~2.0.0:
   version "2.0.1"
   resolved "https://registry.yarnpkg.com/process-nextick-args/-/process-nextick-args-2.0.1.tgz#7820d9b16120cc55ca9ae7792680ae7dba6d7fe2"
   integrity sha512-3ouUOpQhtgrbOa17J7+uxOTpITYWaGP7/AhoR3+A+/1e9skrzelGi/dXzEYyvbxubEF6Wn2ypscTKiKJFFn1ag==
+
+promise-batcher@^1.0.1:
+  version "1.0.2"
+  resolved "https://registry.yarnpkg.com/promise-batcher/-/promise-batcher-1.0.2.tgz#3765ee214d7520bb29acd2ef4f334df88be03295"
+  integrity sha512-rIy53dWwsEKb7ps3Phbr+CkSe++AZ5gjXKKUiZNln06GpHKSqH1RafdffSPtN9d9FxxgRgMC6zO3w7JYjZR/ew==
+  dependencies:
+    debug "^4.1.1"
+    p-defer "^1.0.0"
+
+promise-pool-executor@^1.1.1:
+  version "1.1.1"
+  resolved "https://registry.yarnpkg.com/promise-pool-executor/-/promise-pool-executor-1.1.1.tgz#dd75137b253026599430c899faf98a96b46b99a8"
+  integrity sha512-WZTGr7E8tiW93QoSRe0+arBIrJ13m7yKov/vyWqP8nkME/OjfzZgmSJjLtcDHd6VVz2LdSoAHZLmDfis8hJd1w==
+  dependencies:
+    debug "^3.1.0"
+    next-tick "^1.0.0"
+    p-defer "^1.0.0"
+    promise-batcher "^1.0.1"
 
 proxy-addr@~2.0.5:
   version "2.0.5"

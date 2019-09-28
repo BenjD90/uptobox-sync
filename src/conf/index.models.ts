@@ -18,6 +18,7 @@ export interface Conf {
 		enabled: boolean;
 	};
 	files?: {
+		minSizeMegaBytes: number;
 		directories: {
 			path: string;
 			remotePrefix: string
@@ -25,9 +26,16 @@ export interface Conf {
 	};
 	uptobox?: {
 		url: string;
-		token: string;
+		token?: string;
+		uploadType: 'ftp' | 'http';
+		concurrencyLimit: number;
+		poolSize: number;
 		ftp: {
 			auth: AccessOptions
+		},
+		http: {
+			url?: string;
+			sessionId?: string;
 		}
 	};
 }

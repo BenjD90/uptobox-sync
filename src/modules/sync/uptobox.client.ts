@@ -4,6 +4,8 @@ import * as path from 'path';
 import { Inject, Service } from 'typedi';
 import { Conf } from '../../conf/index.models';
 import * as moment from 'moment';
+import * as FsExtra from 'fs-extra';
+import * as _ from 'lodash';
 
 interface UptoboxResponse<T> {
 	statusCode: number;
@@ -71,8 +73,8 @@ export class UptoboxClient {
 	 * @param remotePath path from root
 	 */
 	public async ensureFolder(remotePath: string): Promise<number> {
-		const remotePathParts = remotePath.split(path.delimiter);
-		let pathConcatenated = remotePathParts[0];
+		const remotePathParts = remotePath.split('/');
+		let pathConcatenated = '/' + remotePathParts[0];
 		let remoteFolderId: number;
 		for (const remotePathPart of remotePathParts) {
 			remoteFolderId = await this.findRemoteFolder(pathConcatenated);
@@ -90,25 +92,72 @@ export class UptoboxClient {
 			token: this.token,
 			file_codes: fileCode,
 			destination_fld_id: targetFolderId,
-			action: 'move'
+			action: 'move',
 		});
 	}
 
-	private async findRemoteFolder(remotePath: string): Promise<number> {
-		const folderDetails = await this.httpClient.get<UptoboxResponse<{
-			path: string,
-			currentFolder: {
-				fld_id: number
+	public async uploadViaHTTP(fullPath: string, name: string, bar: { update: (size: number, context?: object) => void, increment: (delta: number) => void}): Promise<string> {
+		let fileStream = FsExtra.createReadStream(fullPath);
+		fileStream.on('data', (chunk) => {
+			bar.increment(chunk.length);
+		});
+
+		const fileUploadResponse = await this.httpClient.raw<{
+			files: {
+				name: string,
+				size: number,
+				url: string,
+				deleteUrl: string
+			}[]
+		}>([this.conf.uptobox.http.url, `upload`], {
+			method: 'post',
+			qs: {
+				sess_id: this.conf.uptobox.http.sessionId,
+			},
+			formData: {
+				files: {
+					value: fileStream,
+					options: {
+						filename: name,
+						contentType: null,
+					},
+				},
+			},
+		});
+
+		if (!fileUploadResponse.files) {
+			throw new N9Error('missing-files-in-response', 500, { fileUploadResponse });
+		}
+
+		const fileCode = _.last(fileUploadResponse.files[0].url.split('/'));
+		return fileCode;
+	}
+
+	public async findRemoteFolder(remotePath: string): Promise<number> {
+		try {
+			const folderDetails = await this.httpClient.get<UptoboxResponse<{
+				path: string,
+				currentFolder: {
+					fld_id: number
+				}
+			}>>([this.conf.uptobox.url, 'user', 'files'], {
+				token: this.token,
+				limit: 1,
+				path: '/' + remotePath,
+			});
+			if (folderDetails.statusCode !== 0) {
+				if ((folderDetails.data as any) === 'Could not find current path') {
+					return;
+				}
+				throw new N9Error('uptobox-error', 500, { remotePath, error: folderDetails });
 			}
-		}>>([this.conf.uptobox.url, 'user', 'files'], {
-			token: this.token,
-			limit: 1,
-			path: '/' + remotePath,
-		});
-		return folderDetails.data.currentFolder.fld_id;
+			return folderDetails.data.currentFolder.fld_id;
+		} catch (e) {
+			throw new N9Error('error-while-reading-folder', 500, { remotePath, e: JSON.parse(JSON.stringify(e)) });
+		}
 	}
 
-	private async createRemoteFolder(remotePath: string): Promise<void> {
+	public async createRemoteFolder(remotePath: string): Promise<void> {
 		await this.httpClient.put<UptoboxResponse<string>>([this.conf.uptobox.url, 'user', 'files'], undefined, {
 			token: this.token,
 			path: '/' + path.normalize(path.dirname(remotePath)),

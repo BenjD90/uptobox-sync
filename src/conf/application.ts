@@ -1,30 +1,42 @@
 import { Conf } from './index.models';
+import * as FsExtra from 'fs-extra';
+import { join } from 'path';
+import * as _ from 'lodash';
 
-const conf: Conf = {
+let conf: Conf = {
 	http: {
 		port: process.env.PORT || 6686,
 	},
 	mongo: {
-		url: 'mongodb://127.0.0.1:27018/uptobox-sync'
+		url: 'mongodb://127.0.0.1:27018/uptobox-sync',
 	},
 	files: {
-		directories: [{
-			path: '/home/benjamin/temp/files',
-			remotePrefix: '/test'
-		}]
+		directories: [],
+		minSizeMegaBytes: 2
 	},
 	uptobox: {
 		url: 'https://uptobox.com/api/',
-		token: '2df9a8a05ad0ed3199d44066d62ceaf25nyw4',
+		uploadType: 'http',
+		concurrencyLimit: 6,
+		poolSize: 10,
 		ftp: {
 			auth: {
-				user: 'benjd',
-				password: 'trompette90',
 				host: 'ftp.uptobox.com',
-				secure: false
-			}
-		}
-	}
+				secure: false,
+			},
+		},
+		http: {},
+	},
 };
+
+try {
+	const homedir = require('os').homedir();
+
+	const globalConf = FsExtra.readJSONSync(join(homedir, '.config', 'uptobox-sync.json'));
+	conf = _.merge({}, conf, _.get(globalConf, 'application'));
+} catch (e) {
+	console.error(`Error while loading conf`, e);
+	throw e;
+}
 
 export default conf;

@@ -39,3 +39,4 @@ sonar-project.properties
 
 #local conf
 *local.ts
+conf.json
