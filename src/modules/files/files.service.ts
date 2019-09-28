@@ -1,5 +1,6 @@
-import { MongoClient } from '@neo9/n9-mongo-client';
+import { MongoClient, MongoReadStream } from '@neo9/n9-mongo-client';
 import { N9Log } from '@neo9/n9-node-log';
+import { N9Error } from '@neo9/n9-node-utils';
 import { Cursor } from 'mongodb';
 import * as path from 'path';
 import { Inject, Service } from 'typedi';
@@ -33,7 +34,7 @@ export class FilesService {
 		const directories = this.conf.files.directories;
 		for (const directory of directories) {
 			this.logger.debug(`Reading ${directory.path}`);
-			const files = await fastGlob(directory + '/**/*', {
+			const files = await fastGlob(directory.path + '/**/*', {
 				absolute: true,
 				onlyFiles: true,
 			});
@@ -47,7 +48,8 @@ export class FilesService {
 						name,
 						fileSizeByte: size,
 						directoryFullPath,
-					},
+						directoryBasePath: directory.path,
+					} as FileEntity,
 				}, 'app', undefined, false);
 			}
 		}
@@ -65,5 +67,27 @@ export class FilesService {
 			};
 		}
 		return await this.mongoClient.find(query, page, pageSize);
+	}
+
+	public async findAllFilesToSyncAsStream(): Promise<MongoReadStream<Partial<FileEntity>, Partial<FileEntity>>> {
+		return this.mongoClient.streamWithType({
+			syncDate: {
+				$exists: false,
+			},
+			error: {
+				$exists: false,
+			},
+			fileSizeByte: {
+				$gte: 2 * 1_024 * 1_024, // 2 Mo
+			},
+		}, FileEntity, 1);
+	}
+
+	public async saveErrorToFile(id: string, error: N9Error): Promise<void> {
+		await this.mongoClient.findOneAndUpdateById(id, {
+			$set: {
+				error,
+			},
+		}, 'app');
 	}
 }

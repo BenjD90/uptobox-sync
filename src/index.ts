@@ -4,7 +4,7 @@ import n9Conf from '@neo9/n9-node-conf';
 import n9Log from '@neo9/n9-node-log';
 import { Server } from 'http';
 import { Db } from 'mongodb';
-import routingControllersWrapper from 'n9-node-routing';
+import routingControllersWrapper, { N9NodeRouting } from 'n9-node-routing';
 import { join } from 'path';
 // Add source map supports
 // tslint:disable:no-import-side-effect
@@ -32,9 +32,14 @@ async function start(): Promise<{ server: Server, db: Db, conf: Conf }> {
 	log.info('-'.repeat(initialInfos.length));
 	log.info(initialInfos);
 	log.info('-'.repeat(initialInfos.length));
+	const iocContainer = require('typedi').Container;
 
 	// Connect to MongoDB
 	const db = global.db = await MongoUtils.connect(conf.mongo.url);
+
+	const callbacksBeforeShutdown: N9NodeRouting.CallbacksBeforeShutdown[] = [];
+	iocContainer.set('callbacksBeforeShutdown', callbacksBeforeShutdown);
+
 	// Load modules
 	const { server } = await routingControllersWrapper({
 		hasProxy: false,
@@ -42,7 +47,8 @@ async function start(): Promise<{ server: Server, db: Db, conf: Conf }> {
 		path: join(__dirname, 'modules'),
 		http: conf.http,
 		shutdown: {
-			waitDurationBeforeStop: 0
+			waitDurationBeforeStop: 0,
+			callbacksBeforeShutdown,
 		}
 	});
 
