@@ -1,26 +1,22 @@
 {
-  "name": "n9-node-microservice-skeleton",
-  "description": "A starter app to use routing-controllers-wrapper",
+  "name": "uptobox-sync",
+  "description": "An app to sync all files from multiple directories to uptobox",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.0.0",
   "main": "index.js",
   "scripts": {
-    "dev": "nodemon --exec node -r ts-node/register --inspect=10000 -- src/index.ts",
+    "dev": "nodemon --exec node -r ts-node/register --inspect=10001 -- src/index.ts",
     "build": "rimraf dist/ && tsc && cp package.json dist/ && cp -r node_modules/ dist/",
-    "build:test": "rimraf dist/ && tsc --project tsconfig.test.json && copyfiles package.json test/fixtures/* dist/",
     "start": "node dist/",
     "lint": "tslint  --project tsconfig.json 'src/**/*.ts'",
-    "test": "npm run lint && npm run build:test && nyc ava --verbose --serial dist/test/ && nyc report --reporter=html",
-    "coverage": "nyc report --reporter=text-lcov > coverage.lcov && codecov",
     "release": "export BABEL_DISABLE_CACHE=1 && release-it",
-    "release:dry": "export BABEL_DISABLE_CACHE=1 && release-it --dry-run=true",
     "build:changelog": "conventional-changelog -i CHANGELOG.md -s -p jscs -r 0",
     "post:release": "echo Successfully released $npm_package_version",
     "postinstall": "(./bin/setup-git-hooks && yarn run build) || echo 'Not a git repository'"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/neo9/n9-node-microservice-skeleton.git"
+    "url": "git+https://github.com/benjd90/uptobox-sync.git"
   },
   "keywords": [
     "routing-controller",
@@ -32,28 +28,27 @@
   },
   "author": "Benjamin DANIEL",
   "license": "MIT",
-  "homepage": "https://github.com/neo9/n9-node-microservice-skeleton#n9-node-microservice-skeleton",
+  "homepage": "https://github.com/benjd90/uptobox-sync#uptobox-sync",
   "devDependencies": {
-    "copyfiles": "^2.1.1"
+    "copyfiles": "^2.1.1",
+    "rimraf": "^3.0.0"
   },
   "dependencies": {
-    "@neo9/n9-mongo-client": "^0.7.0",
+    "@neo9/n9-mongo-client": "^0.10.0",
     "@neo9/n9-node-conf": "^1.0.6",
     "@neo9/n9-node-utils": "^1.5.0",
+    "@types/fs-extra": "^8.0.0",
     "@types/lodash": "^4.14.107",
     "@types/node": "^11.10.4",
     "@types/request-promise-native": "^1.0.14",
-    "@types/std-mocks": "^1.0.0",
-    "ava": "^1.0.0-beta.3",
     "conventional-changelog-cli": "^1.3.21",
-    "glob": "^7.1.2",
+    "fast-glob": "^3.0.4",
+    "fs-extra": "^8.1.0",
     "lodash": "^4.17.5",
-    "n9-node-routing": "^1.11.1",
+    "n9-node-routing": "^1.17.0",
     "nodemon": "^1.17.3",
-    "nyc": "^13.3.0",
     "release-it": "7.4.8",
     "request-promise-native": "^1.0.5",
-    "std-mocks": "^1.0.1",
     "tslint": "^5.9.1",
     "typescript": "^3.3.3333"
   }

@@ -9,7 +9,7 @@ import { join } from 'path';
 // Add source map supports
 // tslint:disable:no-import-side-effect
 import 'source-map-support/register';
-import { Conf } from './conf';
+import { Conf } from './conf/index.models';
 
 // Handle Unhandled promise rejections
 process.on('unhandledRejection', /* istanbul ignore next */ (err) => {
@@ -37,9 +37,13 @@ async function start(): Promise<{ server: Server, db: Db, conf: Conf }> {
 	const db = global.db = await MongoUtils.connect(conf.mongo.url);
 	// Load modules
 	const { server } = await routingControllersWrapper({
-		hasProxy: true,
+		hasProxy: false,
+		enableLogFormatJSON: false,
 		path: join(__dirname, 'modules'),
 		http: conf.http,
+		shutdown: {
+			waitDurationBeforeStop: 0
+		}
 	});
 
 	// Log the startup time
@@ -56,7 +60,7 @@ if (conf.env !== 'test') {
 				(global.log || console).info('Launch SUCCESS !');
 			})
 			.catch((e) => {
-				(global.log || console).error('Error on lauch', e);
+				(global.log || console).error('Error on launch', e);
 				throw e;
 			});
 }
