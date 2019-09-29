@@ -6,7 +6,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon --exec node -r ts-node/register --inspect=10001 -- src/index.ts",
-    "build": "rimraf dist/ && tsc && cp package.json dist/ && cp -r node_modules/ dist/",
+    "build": "rimraf dist/ && tsc && cp package.json dist/ && rm -f dist/conf/local.js dist/conf/local.d.ts && cp -r node_modules/ dist/",
     "start": "node dist/",
     "lint": "tslint  --project tsconfig.json 'src/**/*.ts'",
     "release": "export BABEL_DISABLE_CACHE=1 && release-it",

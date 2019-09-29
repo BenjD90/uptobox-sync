@@ -16,7 +16,7 @@ let conf: Conf = {
 	},
 	uptobox: {
 		url: 'https://uptobox.com/api/',
-		preferredUploadType: 'http',
+		preferredUploadType: 'ftp',
 		concurrencyLimit: 6,
 		poolSize: 10,
 		ftp: {
