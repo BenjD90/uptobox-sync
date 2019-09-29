@@ -1,13 +1,14 @@
 import { MongoClient, MongoReadStream } from '@neo9/n9-mongo-client';
 import { N9Log } from '@neo9/n9-node-log';
 import { N9Error } from '@neo9/n9-node-utils';
+import * as fastGlob from 'fast-glob';
+import * as FsExtra from 'fs-extra';
+import * as _ from 'lodash';
 import { Cursor } from 'mongodb';
 import * as path from 'path';
 import { Inject, Service } from 'typedi';
 import { Conf } from '../../conf/index.models';
 import { FileEntity, FileListItem } from './files.models';
-import * as fastGlob from 'fast-glob';
-import * as FsExtra from 'fs-extra';
 
 @Service()
 export class FilesService {
@@ -71,8 +72,8 @@ export class FilesService {
 		return await this.mongoClient.find(query, page, pageSize);
 	}
 
-	public async findAllFilesToSyncAsStream(): Promise<MongoReadStream<Partial<FileEntity>, Partial<FileEntity>>> {
-		return this.mongoClient.streamWithType(this.getQueryForAllFilesToSync(), FileEntity, 1);
+	public async findAllFilesToSyncAsStream(pageSize: number = 1): Promise<MongoReadStream<Partial<FileEntity>, Partial<FileEntity>>> {
+		return this.mongoClient.streamWithType(this.getQueryForAllFilesToSync(), FileEntity, pageSize);
 	}
 
 	public async countAllFilesToSync(): Promise<number> {
@@ -93,6 +94,15 @@ export class FilesService {
 				syncDate: new Date(),
 			},
 		}, 'app');
+	}
+
+	public async sumAllSizesToSync(): Promise<number> {
+		let sum = 0;
+		const s = await this.findAllFilesToSyncAsStream(100);
+		await s.forEachPage(async (files) => {
+			sum += _.sumBy(files, (file) => file.fileSizeByte);
+		});
+		return sum;
 	}
 
 	private getQueryForAllFilesToSync(): object {

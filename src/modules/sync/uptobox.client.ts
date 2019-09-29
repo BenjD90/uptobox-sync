@@ -1,11 +1,11 @@
 import { N9Error } from '@neo9/n9-node-utils';
+import * as FsExtra from 'fs-extra';
+import * as _ from 'lodash';
+import * as moment from 'moment';
 import { N9HttpClient } from 'n9-node-routing';
 import * as path from 'path';
 import { Inject, Service } from 'typedi';
 import { Conf } from '../../conf/index.models';
-import * as moment from 'moment';
-import * as FsExtra from 'fs-extra';
-import * as _ from 'lodash';
 
 interface UptoboxResponse<T> {
 	statusCode: number;
@@ -96,10 +96,10 @@ export class UptoboxClient {
 		});
 	}
 
-	public async uploadViaHTTP(fullPath: string, name: string, bar: { update: (size: number, context?: object) => void, increment: (delta: number) => void}): Promise<string> {
+	public async uploadViaHTTP(fullPath: string, name: string, onChunkSent: (delta: number) => void): Promise<string> {
 		let fileStream = FsExtra.createReadStream(fullPath);
 		fileStream.on('data', (chunk) => {
-			bar.increment(chunk.length);
+			onChunkSent(chunk.length);
 		});
 
 		const fileUploadResponse = await this.httpClient.raw<{

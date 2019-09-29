@@ -14,6 +14,7 @@ import { Inject, Service } from 'typedi';
 import { Conf } from '../../conf/index.models';
 import { FileEntity } from '../files/files.models';
 import { FilesService } from '../files/files.service';
+import { Utils } from '../utils.service';
 import { SyncEntity } from './sync.models';
 import { UptoboxClient } from './uptobox.client';
 
@@ -69,6 +70,7 @@ export class SyncService {
 
 			const allFilesToSync = await this.filesService.findAllFilesToSyncAsStream();
 			const nbFilesToSync = await this.filesService.countAllFilesToSync();
+			const totalSizeToUpload = await this.filesService.sumAllSizesToSync();
 			const multibar = new CliProgress.MultiBar({
 				clearOnComplete: true,
 				hideCursor: true,
@@ -78,18 +80,21 @@ export class SyncService {
 			const pool = new PromisePool.PromisePoolExecutor({
 				concurrencyLimit: this.conf.uptobox.concurrencyLimit,
 			});
-			const globalBar: CliProgress.SingleBar = multibar.create(nbFilesToSync, 0, {
-				filename: `0 / ${nbFilesToSync}`,
-			});
 			let nbFileTreated = 0;
+			let nbBytesTreated = 0;
+			const globalBar: CliProgress.SingleBar = multibar.create(totalSizeToUpload, 0, {
+				filename: `${(nbFileTreated).toLocaleString().padStart(5)} / ${(nbFilesToSync).toLocaleString().padStart(5)} | ${Utils.sizeToGo(nbBytesTreated)} / ${Utils.sizeToGo(totalSizeToUpload)} Go`,
+			});
 
 			await allFilesToSync.forEachAsync(async (file: FileEntity) => {
 				pool.addSingleTask({
 					generator: async () => {
-						const bar = await this.uploadOneFile(multibar, file);
-						multibar.remove(bar);
-						globalBar.increment(1, { filename: `${nbFileTreated} / ${nbFilesToSync}` });
+						await this.uploadOneFile(multibar, file);
+						globalBar.increment(file.fileSizeByte, {
+							filename: `${(nbFileTreated).toLocaleString().padStart(5)} / ${(nbFilesToSync).toLocaleString().padStart(5)} | ${Utils.sizeToGo(nbBytesTreated)} / ${Utils.sizeToGo(totalSizeToUpload)} Go`,
+						});
 						nbFileTreated++;
+						nbBytesTreated += file.fileSizeByte;
 					},
 				});
 				while (pool.activeTaskCount >= this.conf.uptobox.poolSize) {
@@ -112,11 +117,21 @@ export class SyncService {
 		});
 	}
 
-	private async uploadOneFile(multibar: CliProgress.MultiBar, file: FileEntity): Promise<CliProgress.SingleBar> {
+	public async beforeShutdown(): Promise<void> {
+		this.logger.info(`Close FTP connexion before shutdown`);
+		for (const activeFtpClient of this.activeFtpClients) {
+			activeFtpClient.close();
+		}
+		await this.endRunningSync();
+	}
+
+
+	private async uploadOneFile(multibar: CliProgress.MultiBar, file: FileEntity): Promise<void> {
+		let nbBytesUploaded = 0;
+		const bar: CliProgress.SingleBar = multibar.create(file.fileSizeByte, 0, {
+			filename: `${Utils.sizeToGo(nbBytesUploaded, 3, 2)} /${Utils.sizeToGo(file.fileSizeByte, 3, 2)} Go | ${file.name.padEnd(90)}`,
+		});
 		try {
-			const bar: CliProgress.SingleBar = multibar.create(file.fileSizeByte, 0, {
-				filename: `${_.round(file.fileSizeByte / (1024 * 1024 * 1024), 2)} Go | `.padStart(15) + `${file.name}`.padEnd(90),
-			});
 			// check file exist
 			const isFileExists = await FsExtra.pathExists(file.fullPath);
 			if (!isFileExists) {
@@ -126,7 +141,12 @@ export class SyncService {
 			if (this.conf.uptobox.uploadType === 'ftp') {
 				fileCode = await this.uploadViaFTP(file.fullPath, file.name);
 			} else {
-				fileCode = await this.uptoboxClient.uploadViaHTTP(file.fullPath, file.name, bar);
+				fileCode = await this.uptoboxClient.uploadViaHTTP(file.fullPath, file.name, (delta) => {
+					nbBytesUploaded += delta;
+					bar.increment(delta, {
+						filename: `${Utils.sizeToGo(nbBytesUploaded, 3, 2)} /${Utils.sizeToGo(file.fileSizeByte, 3, 2)} Go | ${file.name.padEnd(90)}`,
+					});
+				});
 			}
 
 			// set file private
@@ -142,7 +162,6 @@ export class SyncService {
 
 			await this.filesService.setSynced(file._id);
 
-			return bar;
 		} catch (e) {
 			this.logger.error(`Error while sending file`, e, JSON.stringify(e));
 			await this.filesService.saveErrorToFile(file._id, {
@@ -157,14 +176,7 @@ export class SyncService {
 				throw e;
 			}
 		}
-	}
-
-	public async beforeShutdown(): Promise<void> {
-		this.logger.info(`Close FTP connexion before shutdown`);
-		for (const activeFtpClient of this.activeFtpClients) {
-			activeFtpClient.close();
-		}
-		await this.endRunningSync();
+		multibar.remove(bar);
 	}
 
 	private async uploadViaFTP(fullPath: string, name: string): Promise<string> {

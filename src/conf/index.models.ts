@@ -1,6 +1,6 @@
 import { N9Log } from '@neo9/n9-node-log';
+import { AccessOptions } from 'basic-ftp';
 import { N9NodeRouting } from 'n9-node-routing';
-import {  AccessOptions} from 'basic-ftp';
 
 export interface Conf {
 	// n9-micro config
@@ -18,22 +18,22 @@ export interface Conf {
 		enabled: boolean;
 	};
 	files?: {
-		minSizeMegaBytes: number;
+		minSizeMegaBytes?: number;
 		directories: {
 			path: string;
 			remotePrefix: string
 		}[]
 	};
 	uptobox?: {
-		url: string;
+		url?: string;
 		token?: string;
-		uploadType: 'ftp' | 'http';
-		concurrencyLimit: number;
-		poolSize: number;
-		ftp: {
+		uploadType?: 'ftp' | 'http';
+		concurrencyLimit?: number;
+		poolSize?: number;
+		ftp?: {
 			auth: AccessOptions
 		},
-		http: {
+		http?: {
 			url?: string;
 			sessionId?: string;
 		}
