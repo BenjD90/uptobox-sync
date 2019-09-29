@@ -1,7 +1,7 @@
-import { Conf } from './index.models';
 import * as FsExtra from 'fs-extra';
-import { join } from 'path';
 import * as _ from 'lodash';
+import { join } from 'path';
+import { Conf } from './index.models';
 
 let conf: Conf = {
 	http: {
@@ -12,11 +12,11 @@ let conf: Conf = {
 	},
 	files: {
 		directories: [],
-		minSizeMegaBytes: 2
+		minSizeMegaBytes: 2,
 	},
 	uptobox: {
 		url: 'https://uptobox.com/api/',
-		uploadType: 'http',
+		preferredUploadType: 'http',
 		concurrencyLimit: 6,
 		poolSize: 10,
 		ftp: {

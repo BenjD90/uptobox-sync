@@ -27,11 +27,11 @@ export interface Conf {
 	uptobox?: {
 		url?: string;
 		token?: string;
-		uploadType?: 'ftp' | 'http';
+		preferredUploadType?: 'ftp' | 'http';
 		concurrencyLimit?: number;
 		poolSize?: number;
 		ftp?: {
-			auth: AccessOptions
+			auth?: AccessOptions
 		},
 		http?: {
 			url?: string;

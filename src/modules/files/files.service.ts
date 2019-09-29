@@ -39,6 +39,7 @@ export class FilesService {
 				absolute: true,
 				onlyFiles: true,
 			});
+			this.logger.info(`Found ${files.length.toLocaleString()} files in ${directory.path}`);
 			for (const file of files) {
 				const size = (await FsExtra.stat(file)).size;
 				const name = path.basename(file);

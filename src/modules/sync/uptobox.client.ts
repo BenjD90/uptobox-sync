@@ -4,6 +4,7 @@ import * as _ from 'lodash';
 import * as moment from 'moment';
 import { N9HttpClient } from 'n9-node-routing';
 import * as path from 'path';
+import * as ProgressStream from 'progress-stream';
 import { Inject, Service } from 'typedi';
 import { Conf } from '../../conf/index.models';
 
@@ -73,16 +74,20 @@ export class UptoboxClient {
 	 * @param remotePath path from root
 	 */
 	public async ensureFolder(remotePath: string): Promise<number> {
+		if (!remotePath.startsWith('/')) {
+			throw new N9Error('can-create-remote-path-only-with-full-path', 400, { remotePath });
+		}
+
 		const remotePathParts = remotePath.split('/');
-		let pathConcatenated = '/' + remotePathParts[0];
 		let remoteFolderId: number;
-		for (const remotePathPart of remotePathParts) {
+		let pathConcatenated = '/';
+		for (const remotePathPart of remotePathParts.slice(1)) {
+			pathConcatenated = path.join(pathConcatenated, remotePathPart);
 			remoteFolderId = await this.findRemoteFolder(pathConcatenated);
 			if (!remoteFolderId) {
 				await this.createRemoteFolder(pathConcatenated);
 				remoteFolderId = await this.findRemoteFolder(pathConcatenated);
 			}
-			pathConcatenated = path.join(pathConcatenated, remotePathPart);
 		}
 		return remoteFolderId;
 	}
@@ -96,11 +101,16 @@ export class UptoboxClient {
 		});
 	}
 
-	public async uploadViaHTTP(fullPath: string, name: string, onChunkSent: (delta: number) => void): Promise<string> {
-		let fileStream = FsExtra.createReadStream(fullPath);
-		fileStream.on('data', (chunk) => {
-			onChunkSent(chunk.length);
+	public async uploadViaHTTP(fullPath: string, name: string, fileSize: number, onProgress: (update: ProgressStream.Progress) => void): Promise<string> {
+		const progressStream = ProgressStream({
+			length: fileSize,
+			time: 500, // print every 500 ms
+		}).on('progress', (update) => {
+			onProgress(update);
 		});
+
+		let fileStream = FsExtra.createReadStream(fullPath)
+				.pipe(progressStream);
 
 		const fileUploadResponse = await this.httpClient.raw<{
 			files: {
@@ -158,10 +168,16 @@ export class UptoboxClient {
 	}
 
 	public async createRemoteFolder(remotePath: string): Promise<void> {
-		await this.httpClient.put<UptoboxResponse<string>>([this.conf.uptobox.url, 'user', 'files'], undefined, {
-			token: this.token,
+		let params = {
 			path: '/' + path.normalize(path.dirname(remotePath)),
 			name: path.basename(remotePath),
+		};
+		const res = await this.httpClient.put<UptoboxResponse<string>>([this.conf.uptobox.url, 'user', 'files'], undefined, {
+			token: this.token,
+			...params,
 		});
+		if (res.statusCode !== 0) {
+			throw new N9Error('uptobox-error', 500, { remotePath, error: res });
+		}
 	}
 }

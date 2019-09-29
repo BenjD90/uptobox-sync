@@ -9,6 +9,7 @@ import * as FsExtra from 'fs-extra';
 import * as _ from 'lodash';
 import * as moment from 'moment';
 import { N9NodeRouting } from 'n9-node-routing';
+import * as ProgressStream from 'progress-stream';
 import * as PromisePool from 'promise-pool-executor';
 import { Inject, Service } from 'typedi';
 import { Conf } from '../../conf/index.models';
@@ -83,7 +84,7 @@ export class SyncService {
 			let nbFileTreated = 0;
 			let nbBytesTreated = 0;
 			const globalBar: CliProgress.SingleBar = multibar.create(totalSizeToUpload, 0, {
-				filename: `${(nbFileTreated).toLocaleString().padStart(5)} / ${(nbFilesToSync).toLocaleString().padStart(5)} | ${Utils.sizeToGo(nbBytesTreated)} / ${Utils.sizeToGo(totalSizeToUpload)} Go`,
+				filename: `${(nbFileTreated).toLocaleString().padStart(5)} / ${(nbFilesToSync).toLocaleString().padStart(5)} | ${Utils.sizeToGB(nbBytesTreated)} / ${Utils.sizeToGB(totalSizeToUpload)} GB`,
 			});
 
 			await allFilesToSync.forEachAsync(async (file: FileEntity) => {
@@ -91,7 +92,7 @@ export class SyncService {
 					generator: async () => {
 						await this.uploadOneFile(multibar, file);
 						globalBar.increment(file.fileSizeByte, {
-							filename: `${(nbFileTreated).toLocaleString().padStart(5)} / ${(nbFilesToSync).toLocaleString().padStart(5)} | ${Utils.sizeToGo(nbBytesTreated)} / ${Utils.sizeToGo(totalSizeToUpload)} Go`,
+							filename: `${(nbFileTreated).toLocaleString().padStart(5)} / ${(nbFilesToSync).toLocaleString().padStart(5)} | ${Utils.sizeToGB(nbBytesTreated)} / ${Utils.sizeToGB(totalSizeToUpload)} GB`,
 						});
 						nbFileTreated++;
 						nbBytesTreated += file.fileSizeByte;
@@ -127,9 +128,8 @@ export class SyncService {
 
 
 	private async uploadOneFile(multibar: CliProgress.MultiBar, file: FileEntity): Promise<void> {
-		let nbBytesUploaded = 0;
 		const bar: CliProgress.SingleBar = multibar.create(file.fileSizeByte, 0, {
-			filename: `${Utils.sizeToGo(nbBytesUploaded, 3, 2)} /${Utils.sizeToGo(file.fileSizeByte, 3, 2)} Go | ${file.name.padEnd(90)}`,
+			filename: `${Utils.sizeToGB(0, 3, 2)} /${Utils.sizeToGB(file.fileSizeByte, 3, 2)} GB | ${file.name.padEnd(90)}`,
 		});
 		try {
 			// check file exist
@@ -138,15 +138,28 @@ export class SyncService {
 				throw new N9Error('file-not-found', 404, {});
 			}
 			let fileCode: string;
-			if (this.conf.uptobox.uploadType === 'ftp') {
-				fileCode = await this.uploadViaFTP(file.fullPath, file.name);
-			} else {
-				fileCode = await this.uptoboxClient.uploadViaHTTP(file.fullPath, file.name, (delta) => {
-					nbBytesUploaded += delta;
-					bar.increment(delta, {
-						filename: `${Utils.sizeToGo(nbBytesUploaded, 3, 2)} /${Utils.sizeToGo(file.fileSizeByte, 3, 2)} Go | ${file.name.padEnd(90)}`,
+			if (this.conf.uptobox.preferredUploadType === 'ftp') {
+				try {
+					fileCode = await this.uploadViaFTP(file.fullPath, file.name, file.fileSizeByte, (progress: ProgressStream.Progress) => {
+						this.onPartOnFileUploaded('FTP ', progress, bar, file.name);
 					});
-				});
+				} catch (e) {
+					this.logger.error(`Error while sending file through FTP, retrying through HTTP`, { e, eString: JSON.stringify(e) });
+					fileCode = await this.uptoboxClient.uploadViaHTTP(file.fullPath, file.name, file.fileSizeByte, (progress: ProgressStream.Progress) => {
+						this.onPartOnFileUploaded('HTTP', progress, bar, file.name);
+					});
+				}
+			} else {
+				try {
+					fileCode = await this.uptoboxClient.uploadViaHTTP(file.fullPath, file.name, file.fileSizeByte, (progress: ProgressStream.Progress) => {
+						this.onPartOnFileUploaded('HTTP', progress, bar, file.name);
+					});
+				} catch (e) {
+					this.logger.error(`Error while sending file through HTTP, retrying through FTP`, { e, eString: JSON.stringify(e) });
+					fileCode = await this.uploadViaFTP(file.fullPath, file.name, file.fileSizeByte, (progress: ProgressStream.Progress) => {
+						this.onPartOnFileUploaded('FTP ', progress, bar, file.name);
+					});
+				}
 			}
 
 			// set file private
@@ -179,14 +192,41 @@ export class SyncService {
 		multibar.remove(bar);
 	}
 
-	private async uploadViaFTP(fullPath: string, name: string): Promise<string> {
+	private onPartOnFileUploaded(uploadType: 'FTP ' | 'HTTP', progress: ProgressStream.Progress, bar: CliProgress.SingleBar, fileName: string): void {
+		let speedInMB = progress.speed / (1_024 * 1_024);
+		let speedInMb = (8 * progress.speed) / (1_024 * 1_024);
+		const speed = `${Utils.formatMBOrMb(speedInMB)} MB/s | ${Utils.formatMBOrMb(speedInMb)} Mb/s `;
+		const volumeState = `${Utils.sizeToGB(progress.transferred, 3, 2)} /${Utils.sizeToGB(progress.length, 3, 2)} GB`;
+		bar.increment(progress.delta, {
+			filename: `${uploadType} | ${volumeState} | ${speed} | ${fileName.padEnd(90)}`,
+		});
+	}
+
+	private async uploadViaFTP(fullPath: string, name: string, fileSize: number, onProgress: (update: ProgressStream.Progress) => void): Promise<string> {
 		// send ftp
 		const ftpClient = new BasicFTP.Client();
 		await ftpClient.access(this.conf.uptobox.ftp.auth);
 		const ftpClientIndex = this.activeFtpClients.push(ftpClient);
-		await ftpClient.upload(FsExtra.createReadStream(fullPath), name);
-		this.activeFtpClients.splice(ftpClientIndex, 1);
-		ftpClient.close();
+		const progressStream = ProgressStream({
+			length: fileSize,
+			time: 500, // print every 500 ms
+		}).on('progress', (update) => {
+			onProgress(update);
+		});
+
+		let fileStream = FsExtra.createReadStream(fullPath)
+				.pipe(progressStream);
+
+		try {
+			await ftpClient.upload(fileStream, name);
+		} catch (e) {
+			throw e;
+		} finally {
+			this.activeFtpClients.splice(ftpClientIndex, 1);
+			ftpClient.close();
+		}
+		// wait 10s to check file, letting time to uptobox to fetch uploaded file
+		await waitFor(10 * 1_000);
 		// fetch file details from FTP folder
 		const fileCode = await this.uptoboxClient.getFileIdFromNameInFTPFolder(name);
 		return fileCode;
