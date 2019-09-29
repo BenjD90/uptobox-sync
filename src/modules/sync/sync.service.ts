@@ -225,10 +225,18 @@ export class SyncService {
 			this.activeFtpClients.splice(ftpClientIndex, 1);
 			ftpClient.close();
 		}
-		// wait 10s to check file, letting time to uptobox to fetch uploaded file
-		await waitFor(10 * 1_000);
-		// fetch file details from FTP folder
-		const fileCode = await this.uptoboxClient.getFileIdFromNameInFTPFolder(name);
+
+		let fileCode: string;
+		const startTime = Date.now();
+		do {
+			if ((Date.now() - startTime) > (this.conf.uptobox.ftp.waitTimeoutInSec * 1_000)) {
+				throw new N9Error('file-not-found-in-uptobox', 404, { name });
+			}
+			// wait 10s to check file, letting time to uptobox to fetch uploaded file
+			await waitFor(this.conf.uptobox.ftp.waitDurationBetweenUploadDoneAndCheckInSec * 1_000);
+			// fetch file details from FTP folder
+			fileCode = await this.uptoboxClient.getFileIdFromNameInFTPFolder(name);
+		} while (!fileCode);
 		return fileCode;
 	}
 

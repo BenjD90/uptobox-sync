@@ -38,7 +38,7 @@ export class UptoboxClient {
 		return moment(accountDetails.data.premium_expire).toDate();
 	}
 
-	public async getFileIdFromNameInFTPFolder(name: string): Promise<string> {
+	public async getFileIdFromNameInFTPFolder(name: string): Promise<string | undefined> {
 		const allFiles = await this.httpClient.get<UptoboxResponse<{
 			path: string,
 			files: {
@@ -54,7 +54,7 @@ export class UptoboxClient {
 
 		const file = allFiles.data.files.find((f) => f.file_name === name);
 		if (!file) {
-			throw new N9Error('file-not-found-in-uptobox', 404, { name });
+			return;
 			// todo: retry next page
 		}
 		return file.file_code;

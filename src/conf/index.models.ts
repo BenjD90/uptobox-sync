@@ -31,6 +31,8 @@ export interface Conf {
 		concurrencyLimit?: number;
 		poolSize?: number;
 		ftp?: {
+			waitDurationBetweenUploadDoneAndCheckInSec?: number;
+			waitTimeoutInSec?: number;
 			auth?: AccessOptions
 		},
 		http?: {

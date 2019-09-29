@@ -20,6 +20,8 @@ let conf: Conf = {
 		concurrencyLimit: 6,
 		poolSize: 10,
 		ftp: {
+			waitDurationBetweenUploadDoneAndCheckInSec: 10,
+			waitTimeoutInSec: 10 * 60,
 			auth: {
 				host: 'ftp.uptobox.com',
 				secure: false,
