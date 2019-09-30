@@ -1,7 +1,6 @@
 {
   "name": "uptobox-sync",
   "description": "An app to sync all files from multiple directories to uptobox",
-  "private": true,
   "version": "0.0.0",
   "main": "index.js",
   "scripts": {
@@ -19,6 +18,10 @@
     "url": "git+https://github.com/benjd90/uptobox-sync.git"
   },
   "keywords": [
+    "uptobox",
+    "shcynchronise",
+    "uploader",
+    "batch",
     "routing-controller",
     "express",
     "typescript"
@@ -27,7 +30,7 @@
     "node": ">=10.0.0"
   },
   "author": "Benjamin DANIEL",
-  "license": "MIT",
+  "license": "GNU GPLv3",
   "homepage": "https://github.com/benjd90/uptobox-sync#uptobox-sync",
   "devDependencies": {
     "copyfiles": "^2.1.1",
