@@ -18,6 +18,7 @@ export class FilesController {
 	@Post('/refresh')
 	public async refreshFilesIndex(): Promise<void> {
 		await this.filesService.refreshFilesIndex();
+		this.logger.info(`END REFRESH OK`);
 	}
 
 	@Get('/')

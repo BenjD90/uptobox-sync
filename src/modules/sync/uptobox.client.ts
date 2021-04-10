@@ -1,4 +1,4 @@
-import { N9Error } from '@neo9/n9-node-utils';
+import { N9Error, waitFor } from '@neo9/n9-node-utils';
 import * as FsExtra from 'fs-extra';
 import * as _ from 'lodash';
 import * as moment from 'moment';
@@ -7,11 +7,23 @@ import * as path from 'path';
 import * as ProgressStream from 'progress-stream';
 import { Inject, Service } from 'typedi';
 import { Conf } from '../../conf/index.models';
+import { N9Log } from '@neo9/n9-node-log';
+import { StringMap } from '@neo9/n9-mongo-client/dist/src/models';
+import * as FormData from 'form-data';
+import { link } from 'fs';
 
 interface UptoboxResponse<T> {
 	statusCode: number;
 	message: string;
 	data: T;
+}
+
+interface LinkInfoResponse {
+	list: (
+		{ file_code: string; file_name?: string; error?: { code: number; message: string } }
+		&
+		{ code: string; message: string }
+	)[]
 }
 
 @Service()
@@ -21,7 +33,8 @@ export class UptoboxClient {
 	private readonly httpClient: N9HttpClient;
 	private readonly token: string;
 
-	constructor(@Inject('conf') private readonly conf: Conf) {
+	constructor(@Inject('conf') private readonly conf: Conf,
+		@Inject('logger') private readonly logger: N9Log) {
 		this.token = conf.uptobox.token;
 	}
 
@@ -110,8 +123,13 @@ export class UptoboxClient {
 		});
 
 		let fileStream = FsExtra.createReadStream(fullPath)
-				.pipe(progressStream);
+			.pipe(progressStream);
 
+		const body = new FormData();
+		body.append('files', fileStream, {
+			filename: name,
+			contentType: null
+		})
 		const fileUploadResponse = await this.httpClient.raw<{
 			files: {
 				name: string,
@@ -121,17 +139,9 @@ export class UptoboxClient {
 			}[]
 		}>([this.conf.uptobox.http.url, `upload`], {
 			method: 'post',
-			qs: {
+			body,
+			searchParams: {
 				sess_id: this.conf.uptobox.http.sessionId,
-			},
-			formData: {
-				files: {
-					value: fileStream,
-					options: {
-						filename: name,
-						contentType: null,
-					},
-				},
 			},
 		});
 
@@ -178,6 +188,78 @@ export class UptoboxClient {
 		});
 		if (res.statusCode !== 0) {
 			throw new N9Error('uptobox-error', 500, { remotePath, error: res });
+		}
+	}
+
+	public async checkFilesExists(fileCodes: string[], nbTry: number = 0): Promise<StringMap<boolean>> {
+		const response: StringMap<boolean> = {};
+		if (fileCodes.length) {
+			const params = {
+				token: this.token,
+				fileCodes: fileCodes.join(',')
+			};
+
+			const res = await this.httpClient.get<UptoboxResponse<LinkInfoResponse>>(
+				[this.conf.uptobox.url, 'link', 'info'], params);
+			if (res.statusCode !== 0) {
+				throw new N9Error('uptobox-error', 500, { params });
+			}
+			for (const linkInfo of res.data.list) {
+				if (linkInfo.code) { // it's an error
+					this.logger.error(`Error while checking file existance : ${linkInfo.code} ${linkInfo.message}`)
+					throw new N9Error(linkInfo.code, 500, { linkInfo });
+				} else if (!linkInfo.error) {
+					response[linkInfo.file_code] = true;
+				} else {
+					this.logger.warn(`File error ${linkInfo.error?.code} : ${linkInfo.file_code} (${linkInfo?.file_name}) ${linkInfo.error?.message} ${JSON.stringify(linkInfo)}`);
+					if (linkInfo.error?.code === 25) { // error 503
+						if (nbTry < 5) {
+							const waitTimeMS = 40 * 1_000;
+							this.logger.warn(`Retry in ${waitTimeMS / 1_000} s checkFilesExists ${JSON.stringify(linkInfo)}, nbTry = ${nbTry}`);
+							await waitFor(waitTimeMS);
+							nbTry += 1;
+							const valRetried = await this.checkFilesExists([linkInfo.file_code], nbTry);
+							response[linkInfo.file_code] = valRetried[linkInfo.file_code];
+						} else {
+							throw new N9Error('server-temporary-unavailable', 503, { linkInfo });
+						}
+					}
+					response[linkInfo.file_code] = false;
+				}
+			}
+		}
+		await waitFor(500); // add a pause to not call uptobox api to frequently
+		return response;
+	}
+
+	public async findRemoteFileByPath(remoteFolderPath: string, fileName: string): Promise<string> {
+		try {
+			const fileDetails = await this.httpClient.get<UptoboxResponse<{
+				path: string,
+				files: {
+					file_name: string,
+					file_code: string
+				}[]
+			}>>([this.conf.uptobox.url, 'user', 'files'], {
+				token: this.token,
+				limit: 1,
+				path: '/' + remoteFolderPath,
+				searchField: 'file_name',
+				search: fileName
+			});
+			if (fileDetails.statusCode !== 0) {
+				if ((fileDetails.data as any) === 'Could not find current path') {
+					return;
+				}
+				throw new N9Error('uptobox-error', 500, { remotePath: remoteFolderPath, error: fileDetails });
+			}
+			if (fileDetails.data.files.length === 0) {
+				this.logger.warn(`file-not-found ${remoteFolderPath} ${fileName}`);
+				return;
+			}
+			return fileDetails.data.files[0].file_code;
+		} catch (e) {
+			throw new N9Error('error-while-reading-files', 500, { remotePath: remoteFolderPath, e: JSON.parse(JSON.stringify(e)) });
 		}
 	}
 }

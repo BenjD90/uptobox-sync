@@ -135,7 +135,7 @@ export class SyncService {
 			// check file exist
 			const isFileExists = await FsExtra.pathExists(file.fullPath);
 			if (!isFileExists) {
-				throw new N9Error('file-not-found', 404, {});
+				throw new N9Error('file-not-found', 404, { fullPath: file.fullPath });
 			}
 			let fileCode: string;
 			if (this.conf.uptobox.preferredUploadType === 'ftp') {
@@ -173,16 +173,11 @@ export class SyncService {
 			// move file
 			await this.uptoboxClient.moveFileToTargetFolder(fileCode, targetFolderId);
 
-			await this.filesService.setSynced(file._id);
+			await this.filesService.setSynced(file._id, fileCode);
 
 		} catch (e) {
 			this.logger.error(`Error while sending file`, e, JSON.stringify(e));
-			await this.filesService.saveErrorToFile(file._id, {
-				name: e.name,
-				message: e.message,
-				context: e.context,
-				status: e.status,
-			});
+			await this.filesService.saveErrorToFile(file._id, new N9Error(e.name, e.status, e.context));
 			this.nbErrors++;
 			if (this.nbErrors > 100) {
 				this.logger.error(`Nb max errors reached ${this.nbErrors}`);

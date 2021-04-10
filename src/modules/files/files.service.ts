@@ -8,7 +8,9 @@ import { Cursor } from 'mongodb';
 import * as path from 'path';
 import { Inject, Service } from 'typedi';
 import { Conf } from '../../conf/index.models';
+import { UptoboxClient } from '../sync/uptobox.client';
 import { FileEntity, FileListItem } from './files.models';
+import * as PromisePool from 'promise-pool-executor';
 
 @Service()
 export class FilesService {
@@ -20,7 +22,9 @@ export class FilesService {
 
 	private mongoClient: MongoClient<FileEntity, FileListItem>;
 
-	constructor() {
+	constructor(
+		private uptoboxClient: UptoboxClient
+	) {
 		this.mongoClient = new MongoClient('files', FileEntity, FileListItem, {
 			keepHistoric: true,
 		});
@@ -57,6 +61,64 @@ export class FilesService {
 				}
 			}
 		}
+
+		const nbFilesToSync1 = await this.countAllFilesToSync();
+		this.logger.info(`Nb files to sync : ${nbFilesToSync1}`);
+		this.logger.info(`Check file already sync existances online`);
+
+		const nbFilesMissingFileCode = await this.mongoClient.count(this.getFileMissingFileCodeQuery());
+		this.logger.info(`Check ${nbFilesMissingFileCode} files missing fileCodes`);
+		const pool = new PromisePool.PromisePoolExecutor({
+			concurrencyLimit: 2,
+		});
+		const fileSyncWithoutFileCode = this.mongoClient.streamWithType(this.getFileMissingFileCodeQuery(), FileEntity, 100);
+		let i = 0;
+		await fileSyncWithoutFileCode.forEachPage(async (files: FileEntity[]) => {
+			await pool.addEachTask({
+				data: files,
+				generator: async (file) => {
+					const originalDirectory = this.conf.files.directories.find((directory) => directory.path === file.directoryBasePath);
+					if (originalDirectory) {
+						const remotePath = originalDirectory.remotePrefix + file.directoryFullPath.replace(new RegExp('^' + _.escapeRegExp(originalDirectory.path)), '');
+						const fileCode = await this.uptoboxClient.findRemoteFileByPath(remotePath, file.name);
+						if (fileCode) {
+							await this.mongoClient.findOneAndUpdateById(file._id, { $set: { fileCode } }, 'app', undefined, false);
+						} else {
+							await this.mongoClient.findOneAndUpdateById(file._id, { $set: { error: new N9Error('file-remote-not-found', 404, { remotePath, fileName: file.name }) } }, 'app', undefined, false);
+						}
+					} else {
+						this.logger.info(`File ignored because it refer to a directory not referenced in config : ${file.directoryBasePath}`);
+					}
+					i++;
+				}
+			})
+				.promise();
+			this.logger.debug(`Checked ${i.toString(10).padStart(7)} files`);
+		});
+
+		const nbFilesToCheck = await this.mongoClient.count(this.getQueryForAllFilesSync());
+		this.logger.info(`Check if files (${nbFilesToCheck}) are still online`);
+		const pageSize = 100; // max 100 api limit
+		const fileSync = await this.findAllFilesAlreadySyncAsStream(pageSize);
+		i = 0;
+		await fileSync.forEachPage(async (files) => {
+			const checkResults = await this.uptoboxClient.checkFilesExists(files.map((f) => f.fileCode));
+			for (const [fileCode, found] of Object.entries(checkResults)) {
+				if (!found) {
+					await this.mongoClient.findOneAndUpdateByKey(fileCode, {
+						$unset: {
+							syncDate: 1,
+							fileCode: 1
+						}
+					}, 'app', 'fileCode', undefined, false);
+				}
+			}
+			i += pageSize;
+			this.logger.debug(`${i.toString().padStart(7)} files online status checked`);
+		});
+
+		const nbFilesToSync2 = await this.countAllFilesToSync();
+		this.logger.info(`Nb files to sync : ${nbFilesToSync2}`);
 	}
 
 	public async listFiles(page: number, pageSize: number, isSync: boolean): Promise<Cursor<FileListItem>> {
@@ -77,6 +139,10 @@ export class FilesService {
 		return this.mongoClient.streamWithType(this.getQueryForAllFilesToSync(), FileEntity, pageSize);
 	}
 
+	public async findAllFilesAlreadySyncAsStream(pageSize: number = 1): Promise<MongoReadStream<Partial<FileEntity>, Partial<FileEntity>>> {
+		return this.mongoClient.streamWithType(this.getQueryForAllFilesSync(), FileEntity, pageSize);
+	}
+
 	public async countAllFilesToSync(): Promise<number> {
 		return this.mongoClient.count(this.getQueryForAllFilesToSync());
 	}
@@ -89,9 +155,10 @@ export class FilesService {
 		}, 'app');
 	}
 
-	public async setSynced(id: string) {
+	public async setSynced(id: string, fileCode: string) {
 		await this.mongoClient.findOneAndUpdateById(id, {
 			$set: {
+				fileCode: fileCode,
 				syncDate: new Date(),
 			},
 		}, 'app');
@@ -110,6 +177,34 @@ export class FilesService {
 		return {
 			syncDate: {
 				$exists: false,
+			},
+			error: {
+				$exists: false,
+			},
+		};
+	}
+
+	private getQueryForAllFilesSync(): object {
+		return {
+			syncDate: {
+				$exists: true,
+			},
+			fileCode: {
+				$exists: true,
+			},
+			error: {
+				$exists: false,
+			},
+		};
+	}
+
+	private getFileMissingFileCodeQuery(): object {
+		return {
+			syncDate: {
+				$exists: true,
+			},
+			fileCode: {
+				$exists: false
 			},
 			error: {
 				$exists: false,
