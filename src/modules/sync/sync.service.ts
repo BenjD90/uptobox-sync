@@ -3,8 +3,6 @@ import { N9Log } from '@neo9/n9-node-log';
 import { N9Error, waitFor } from '@neo9/n9-node-utils';
 import * as BasicFTP from 'basic-ftp';
 import { Client } from 'basic-ftp';
-// @ts-ignore
-import * as CliProgress from 'cli-progress';
 import * as FsExtra from 'fs-extra';
 import * as _ from 'lodash';
 import * as moment from 'moment';
@@ -18,6 +16,7 @@ import { FilesService } from '../files/files.service';
 import { Utils } from '../utils.service';
 import { SyncEntity } from './sync.models';
 import { UptoboxClient } from './uptobox.client';
+import * as CliProgress from 'cli-progress';
 
 @Service()
 export class SyncService {
@@ -77,6 +76,7 @@ export class SyncService {
 				hideCursor: true,
 				format: `[{bar}] {percentage}%  | {filename} | spent: {duration_formatted} | ETA: {eta_formatted}`,
 				etaBuffer: 20,
+				autopadding: true
 			}, CliProgress.Presets.shades_classic);
 			const pool = new PromisePool.PromisePoolExecutor({
 				concurrencyLimit: this.conf.uptobox.concurrencyLimit,
@@ -125,7 +125,6 @@ export class SyncService {
 		}
 		await this.endRunningSync();
 	}
-
 
 	private async uploadOneFile(multibar: CliProgress.MultiBar, file: FileEntity): Promise<void> {
 		const bar: CliProgress.SingleBar = multibar.create(file.fileSizeByte, 0, {
@@ -188,8 +187,8 @@ export class SyncService {
 	}
 
 	private onPartOnFileUploaded(uploadType: 'FTP ' | 'HTTP', progress: ProgressStream.Progress, bar: CliProgress.SingleBar, fileName: string): void {
-		let speedInMB = progress.speed / (1_024 * 1_024);
-		let speedInMb = (8 * progress.speed) / (1_024 * 1_024);
+		const speedInMB = progress.speed / (1_024 * 1_024);
+		const speedInMb = (8 * progress.speed) / (1_024 * 1_024);
 		const speed = `${Utils.formatMBOrMb(speedInMB)} MB/s | ${Utils.formatMBOrMb(speedInMb)} Mb/s `;
 		const volumeState = `${Utils.sizeToGB(progress.transferred, 3, 2)} /${Utils.sizeToGB(progress.length, 3, 2)} GB`;
 		bar.increment(progress.delta, {
@@ -209,7 +208,7 @@ export class SyncService {
 			onProgress(update);
 		});
 
-		let fileStream = FsExtra.createReadStream(fullPath)
+		const fileStream = FsExtra.createReadStream(fullPath)
 				.pipe(progressStream);
 
 		try {
@@ -235,7 +234,7 @@ export class SyncService {
 		return fileCode;
 	}
 
-	private async endRunningSync() {
+	private async endRunningSync(): Promise<void> {
 		if (this.runningSyncId) {
 			this.logger.info(`End running sync ${this.runningSyncId}`);
 			await this.mongoClient.findOneAndUpdateById(this.runningSyncId, {

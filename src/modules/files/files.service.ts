@@ -155,10 +155,10 @@ export class FilesService {
 		}, 'app');
 	}
 
-	public async setSynced(id: string, fileCode: string) {
+	public async setSynced(id: string, fileCode: string): Promise<void> {
 		await this.mongoClient.findOneAndUpdateById(id, {
 			$set: {
-				fileCode: fileCode,
+				fileCode,
 				syncDate: new Date(),
 			},
 		}, 'app');

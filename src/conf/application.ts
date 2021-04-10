@@ -32,6 +32,7 @@ let conf: Conf = {
 };
 
 try {
+	// tslint:disable-next-line:no-var-requires
 	const homedir = require('os').homedir();
 
 	const globalConf = FsExtra.readJSONSync(join(homedir, '.config', 'uptobox-sync.json'));

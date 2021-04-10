@@ -23,7 +23,7 @@ interface LinkInfoResponse {
 		{ file_code: string; file_name?: string; error?: { code: number; message: string } }
 		&
 		{ code: string; message: string }
-	)[]
+	)[];
 }
 
 @Service()
@@ -33,8 +33,10 @@ export class UptoboxClient {
 	private readonly httpClient: N9HttpClient;
 	private readonly token: string;
 
-	constructor(@Inject('conf') private readonly conf: Conf,
-		@Inject('logger') private readonly logger: N9Log) {
+	constructor(
+			@Inject('conf') private readonly conf: Conf,
+			@Inject('logger') private readonly logger: N9Log
+	) {
 		this.token = conf.uptobox.token;
 	}
 
@@ -122,14 +124,14 @@ export class UptoboxClient {
 			onProgress(update);
 		});
 
-		let fileStream = FsExtra.createReadStream(fullPath)
+		const fileStream = FsExtra.createReadStream(fullPath)
 			.pipe(progressStream);
 
 		const body = new FormData();
 		body.append('files', fileStream, {
 			filename: name,
 			contentType: null
-		})
+		});
 		const fileUploadResponse = await this.httpClient.raw<{
 			files: {
 				name: string,
@@ -178,7 +180,7 @@ export class UptoboxClient {
 	}
 
 	public async createRemoteFolder(remotePath: string): Promise<void> {
-		let params = {
+		const params = {
 			path: '/' + path.normalize(path.dirname(remotePath)),
 			name: path.basename(remotePath),
 		};
@@ -206,7 +208,7 @@ export class UptoboxClient {
 			}
 			for (const linkInfo of res.data.list) {
 				if (linkInfo.code) { // it's an error
-					this.logger.error(`Error while checking file existance : ${linkInfo.code} ${linkInfo.message}`)
+					this.logger.error(`Error while checking file existance : ${linkInfo.code} ${linkInfo.message}`);
 					throw new N9Error(linkInfo.code, 500, { linkInfo });
 				} else if (!linkInfo.error) {
 					response[linkInfo.file_code] = true;
